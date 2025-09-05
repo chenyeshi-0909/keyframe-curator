@@ -14,7 +14,7 @@ jobs:
       with:
         python-version: '3.11'
     - name: Install dependencies
-      run: pip install pillow pyinstaller
+      run: pip install pillow pyinstaller opencv-python numpy
     - name: Build Windows app
       run: pyinstaller --onefile --windowed --name "Keyframe_Curator_Windows" main_app.py
     - name: Upload artifact
