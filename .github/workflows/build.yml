@@ -31,7 +31,7 @@ jobs:
       with:
         python-version: '3.11'
     - name: Install dependencies
-      run: pip install pillow pyinstaller opencv-python
+      run: pip install pillow pyinstaller opencv-python numpy
     - name: Build macOS app
       run: pyinstaller --onedir --windowed --name "Keyframe_Curator_Mac" main_app.py
     - name: Create zip
