@@ -580,7 +580,7 @@ S 跳过当前"""
             output_base.mkdir(exist_ok=True)
             
             # Store in workflow
-            self.current_workflow['keyframes_folder'] = str(output_base)
+            self.current_workflow['keyframes_folder'] = str(output_base.resolve())
             
             # Update UI
             self.root.after(0, lambda: self.extract_status.config(
@@ -732,8 +732,32 @@ S 跳过当前"""
     # Sorting methods
     def load_current_project_for_sorting(self):
         """Load the current project's keyframes for sorting"""
-        if self.current_workflow['keyframes_folder']:
-            self.load_sorting_folder(self.current_workflow['keyframes_folder'])
+        if not self.current_workflow['keyframes_folder']:
+            messagebox.showerror("错误", "没有可用的关键帧文件夹")
+            return
+        
+        keyframes_path = Path(self.current_workflow['keyframes_folder'])
+        
+        # Debug: Print path info (remove after testing)
+        print(f"Looking for keyframes at: {keyframes_path}")
+        print(f"Path exists: {keyframes_path.exists()}")
+        print(f"Is directory: {keyframes_path.is_dir()}")
+        
+        if not keyframes_path.exists():
+            messagebox.showerror("错误", f"关键帧文件夹不存在:\n{keyframes_path}")
+            return
+        
+        if not keyframes_path.is_dir():
+            messagebox.showerror("错误", f"路径不是文件夹:\n{keyframes_path}")
+            return
+        
+        # Check if folder has any images
+        image_files = list(keyframes_path.glob("*.jpg")) + list(keyframes_path.glob("*.jpeg")) + list(keyframes_path.glob("*.png"))
+        if not image_files:
+            messagebox.showerror("错误", f"文件夹中没有图像文件:\n{keyframes_path}")
+            return
+        
+        self.load_sorting_folder(str(keyframes_path))
     
     def load_folder_for_sorting(self):
         """Manually select folder for sorting"""
@@ -748,28 +772,30 @@ S 跳过当前"""
             return
         
         # Create output folders
-        folder_name = os.path.basename(folder_path)
-        parent_dir = os.path.dirname(folder_path)
-        
+        folder_path_obj = Path(folder_path)
+        folder_name = folder_path_obj.name
+        parent_dir = folder_path_obj.parent
+
         # Use consistent naming
         if folder_name.endswith('_keyframes'):
             base_name = folder_name.replace('_keyframes', '')
         else:
             base_name = folder_name
 
-        
-        output_base = os.path.join(parent_dir, f"{base_name}_sorted")
-        os.makedirs(output_base, exist_ok=True)
-        
-        self.sort_background_folder = os.path.join(output_base, "Background")
-        self.sort_human_folder = os.path.join(output_base, "Human")
+        output_base = parent_dir / f"{base_name}_sorted"
+        output_base.mkdir(exist_ok=True)
+
+        self.sort_background_folder = str(output_base / "Background")
+        self.sort_human_folder = str(output_base / "Human")
+        Path(self.sort_background_folder).mkdir(exist_ok=True)
+        Path(self.sort_human_folder).mkdir(exist_ok=True)
         os.makedirs(self.sort_background_folder, exist_ok=True)
         os.makedirs(self.sort_human_folder, exist_ok=True)
         
-        # Update workflow
-        self.current_workflow['sorted_folder'] = output_base
-        self.current_workflow['background_folder'] = self.sort_background_folder
-        self.current_workflow['human_folder'] = self.sort_human_folder
+        # Update workflow with absolute paths
+        self.current_workflow['sorted_folder'] = str(Path(output_base).resolve())
+        self.current_workflow['background_folder'] = str(Path(self.sort_background_folder).resolve())
+        self.current_workflow['human_folder'] = str(Path(self.sort_human_folder).resolve())
         
         # Load images
         self.sort_images = []
