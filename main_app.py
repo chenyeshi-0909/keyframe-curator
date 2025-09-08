@@ -1,6 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import sys
+if sys.platform == 'win32':
+    import locale
+    if sys.stdout and sys.stdout.encoding != 'utf-8':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8', errors='ignore')
+        except AttributeError:
+            pass
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import cv2
@@ -12,6 +21,7 @@ from PIL import Image, ImageTk
 import shutil
 import json
 import threading
+
 
 class HistoricalSceneApp:
     def __init__(self, root):
@@ -62,7 +72,7 @@ class HistoricalSceneApp:
         
         # Use YOUR original extraction settings
         self.extraction_settings = {
-            'scene_threshold': 0.05,      # Your original setting
+            'scene_threshold': 0.1,      # Your original setting
             'min_frames_between': 3,      # Your original: only 3 frames
             'black_threshold': 15,
             'black_ratio': 0.90,
@@ -569,22 +579,6 @@ S 跳过当前"""
             if not cap.isOpened():
                 self.root.after(0, lambda: messagebox.showerror("错误", "无法打开视频文件"))
                 return
-            print(f"Video path: {video_path}")
-            print(f"Video codec: {cap.get(cv2.CAP_PROP_FOURCC)}")
-            print(f"Total frames: {total_frames}")
-            print(f"FPS: {fps}")
-            print(f"Frame width: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}")
-            print(f"Frame height: {cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
-
-            # Test reading first frame
-            ret, test_frame = cap.read()
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to beginning
-            print(f"Can read first frame: {ret}")
-            if ret:
-                print(f"Frame shape: {test_frame.shape}")
-            else:
-                self.root.after(0, lambda: messagebox.showerror("错误", "无法读取视频帧"))
-                return
             
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -592,21 +586,11 @@ S 跳过当前"""
             duration_minutes = total_frames / fps / 60
             
             # Create output directory
-            output_base = Path(video_path).parent / f"{video_name}_keyframes"
-            output_base.mkdir(exist_ok=True)
-            # Verify folder was created successfully
-            if not output_base.exists():
-                self.root.after(0, lambda: messagebox.showerror("错误", f"无法创建输出文件夹: {output_base}"))
-                return
-
-            if not output_base.is_dir():
-                self.root.after(0, lambda: messagebox.showerror("错误", f"输出路径不是文件夹: {output_base}"))
-                return
-
-            print(f"Output folder created: {output_base.resolve()}")
+            output_base = os.path.join(os.path.dirname(video_path), f"{video_name}_keyframes")
+            output_base = Path(output_base)         
             
             # Store in workflow
-            self.current_workflow['keyframes_folder'] = str(output_base.resolve())
+            self.current_workflow['keyframes_folder'] = str(output_base)
             
             # Update UI
             self.root.after(0, lambda: self.extract_status.config(
@@ -622,30 +606,13 @@ S 跳过当前"""
             black_filtered = 0
             
             # Process first frame
-            # Process first frame with better error handling
             ret, first_frame = cap.read()
-            print(f"First frame read result: {ret}")
-
-            if ret:
-                print(f"First frame is black: {self.is_black_frame(first_frame)}")
-                if not self.is_black_frame(first_frame):
-                    output_path = output_base / f"{video_name}_keyframe_{keyframes_detected:04d}.jpg"
-                    success = cv2.imwrite(str(output_path.resolve()), first_frame,
-                                        [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
-                    print(f"First frame save success: {success}")
-                    if success:
-                        keyframes_detected += 1
-                        prev_frame = first_frame.copy()
-                        print(f"First keyframe saved: {output_path}")
-                    else:
-                        print(f"Failed to save first frame: {output_path}")
-                else:
-                    print("First frame is black, skipping...")
-                    prev_frame = first_frame.copy()  # Still use as reference
-            else:
-                print("Could not read first frame!")
-                self.root.after(0, lambda: messagebox.showerror("错误", "无法读取第一帧"))
-                return
+            if ret and not self.is_black_frame(first_frame):
+                output_path = os.path.join(str(output_base), f"{video_name}_keyframe_{keyframes_detected:04d}.jpg")
+                cv2.imwrite(output_path, first_frame,
+                           [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
+                keyframes_detected += 1
+                prev_frame = first_frame.copy()
             
             # Process remaining frames
             while True:
@@ -675,45 +642,27 @@ S 跳过当前"""
                     continue
                 
                 # Calculate scene change
-                # Calculate scene change with debugging
                 if prev_frame is not None:
                     difference = self.calculate_frame_difference(prev_frame, current_frame)
                     
-                    # Debug: Print difference values occasionally
-                    if frame_count % 100 == 0:
-                        print(f"Frame {frame_count}: difference = {difference:.3f}, threshold = {self.extraction_settings['scene_threshold']}")
-                    
                     if difference >= self.extraction_settings['scene_threshold']:
-                        print(f"Scene change detected at frame {frame_count}: {difference:.3f}")
                         # Save keyframe
                         timestamp = frame_count / fps
                         minutes = int(timestamp // 60)
                         seconds = int(timestamp % 60)
                         
                         filename = f"{video_name}_keyframe_{keyframes_detected:04d}_{minutes:02d}m{seconds:02d}s.jpg"
-                        output_path = output_base / filename
+                        output_path = os.path.join(str(output_base), filename)
+                        cv2.imwrite(output_path, current_frame,
+                                   [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
+                        keyframes_detected += 1
+                        frames_since_last = 0
                         
-                        cv2.imwrite(str(output_path.resolve()), current_frame,
-                                    [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
-                        success = cv2.imwrite(str(output_path.resolve()), current_frame,
-                                            [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
-                        if success:
-                            keyframes_detected += 1
-                            frames_since_last = 0
-                            # Update status
-                            self.root.after(0, lambda kf=keyframes_detected: 
-                                        self.extract_status.config(text=f"已提取 {kf} 个关键帧"))
-                        else:
-                            print(f"Failed to save frame: {output_path}")
-                                        
+                        # Update status
+                        self.root.after(0, lambda kf=keyframes_detected: 
+                                      self.extract_status.config(text=f"已提取 {kf} 个关键帧"))
+                
                 prev_frame = current_frame.copy()
-
-            print(f"Processing completed:")
-            print(f"  Total frames processed: {frame_count}")
-            print(f"  Keyframes detected: {keyframes_detected}")
-            print(f"  Black frames filtered: {black_filtered}")
-            print(f"  Max allowed keyframes: {max_allowed}")
-            print(f"  Scene threshold used: {self.extraction_settings['scene_threshold']}")
             
             cap.release()
             
@@ -746,16 +695,6 @@ S 跳过当前"""
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("错误", f"提取失败: {str(e)}"))
             self.root.after(0, lambda: self.extract_btn.config(state='normal'))
-
-        saved_files = list(output_base.glob("*.jpg"))
-        print(f"Files actually saved: {len(saved_files)}")
-        for f in saved_files[:5]:  # Show first 5 files
-            print(f"  - {f.name}")
-
-        if len(saved_files) == 0:
-            print(f"No files found in: {output_base.resolve()}")
-            print(f"Folder exists: {output_base.exists()}")
-            print(f"Folder is directory: {output_base.is_dir()}")
     
     def calculate_frame_difference(self, frame1, frame2):
         """Calculate difference between frames using YOUR ORIGINAL METHOD"""
@@ -802,32 +741,8 @@ S 跳过当前"""
     # Sorting methods
     def load_current_project_for_sorting(self):
         """Load the current project's keyframes for sorting"""
-        if not self.current_workflow['keyframes_folder']:
-            messagebox.showerror("错误", "没有可用的关键帧文件夹")
-            return
-        
-        keyframes_path = Path(self.current_workflow['keyframes_folder'])
-        
-        # Debug: Print path info (remove after testing)
-        print(f"Looking for keyframes at: {keyframes_path}")
-        print(f"Path exists: {keyframes_path.exists()}")
-        print(f"Is directory: {keyframes_path.is_dir()}")
-        
-        if not keyframes_path.exists():
-            messagebox.showerror("错误", f"关键帧文件夹不存在:\n{keyframes_path}")
-            return
-        
-        if not keyframes_path.is_dir():
-            messagebox.showerror("错误", f"路径不是文件夹:\n{keyframes_path}")
-            return
-        
-        # Check if folder has any images
-        image_files = list(keyframes_path.glob("*.jpg")) + list(keyframes_path.glob("*.jpeg")) + list(keyframes_path.glob("*.png"))
-        if not image_files:
-            messagebox.showerror("错误", f"文件夹中没有图像文件:\n{keyframes_path}")
-            return
-        
-        self.load_sorting_folder(str(keyframes_path))
+        if self.current_workflow['keyframes_folder']:
+            self.load_sorting_folder(self.current_workflow['keyframes_folder'])
     
     def load_folder_for_sorting(self):
         """Manually select folder for sorting"""
@@ -842,30 +757,28 @@ S 跳过当前"""
             return
         
         # Create output folders
-        folder_path_obj = Path(folder_path)
-        folder_name = folder_path_obj.name
-        parent_dir = folder_path_obj.parent
-
+        folder_name = os.path.basename(folder_path)
+        parent_dir = os.path.dirname(folder_path)
+        
         # Use consistent naming
         if folder_name.endswith('_keyframes'):
             base_name = folder_name.replace('_keyframes', '')
         else:
             base_name = folder_name
 
-        output_base = parent_dir / f"{base_name}_sorted"
-        output_base.mkdir(exist_ok=True)
-
-        self.sort_background_folder = str(output_base / "Background")
-        self.sort_human_folder = str(output_base / "Human")
-        Path(self.sort_background_folder).mkdir(exist_ok=True)
-        Path(self.sort_human_folder).mkdir(exist_ok=True)
+        
+        output_base = os.path.join(parent_dir, f"{base_name}_sorted")
+        os.makedirs(output_base, exist_ok=True)
+        
+        self.sort_background_folder = os.path.join(output_base, "Background")
+        self.sort_human_folder = os.path.join(output_base, "Human")
         os.makedirs(self.sort_background_folder, exist_ok=True)
         os.makedirs(self.sort_human_folder, exist_ok=True)
         
-        # Update workflow with absolute paths
-        self.current_workflow['sorted_folder'] = str(Path(output_base).resolve())
-        self.current_workflow['background_folder'] = str(Path(self.sort_background_folder).resolve())
-        self.current_workflow['human_folder'] = str(Path(self.sort_human_folder).resolve())
+        # Update workflow
+        self.current_workflow['sorted_folder'] = output_base
+        self.current_workflow['background_folder'] = self.sort_background_folder
+        self.current_workflow['human_folder'] = self.sort_human_folder
         
         # Load images
         self.sort_images = []
