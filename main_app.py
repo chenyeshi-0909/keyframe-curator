@@ -587,7 +587,8 @@ S 跳过当前"""
             
             # Create output directory
             output_base = os.path.join(os.path.dirname(video_path), f"{video_name}_keyframes")
-            output_base = Path(output_base)         
+            output_base = Path(output_base)    
+            output_base.mkdir(exist_ok=True)     
             
             # Store in workflow
             self.current_workflow['keyframes_folder'] = str(output_base)
