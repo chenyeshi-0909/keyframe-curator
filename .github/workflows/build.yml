@@ -1,5 +1,4 @@
 name: Build Keyframe Curator Apps
-
 on:
   push:
     branches: [ main ]
@@ -9,43 +8,50 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    - name: Install dependencies
-      run: |
-        pip install --upgrade pip
-        pip install pillow numpy opencv-python pyinstaller
-        python -c "import cv2, os, pathlib; print('Dependencies OK')"
-    - name: Build Windows app
-      run: |
-        pyinstaller --onefile --windowed --hidden-import cv2 --hidden-import pathlib --collect-all cv2 --name "Keyframe_Curator_Windows" main_app.py
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-app
-        path: dist/Keyframe_Curator_Windows.exe
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pillow pyinstaller opencv-python-headless numpy
+      
+      - name: Build Windows app
+        run: pyinstaller --onefile --windowed --name "Keyframe_Curator_Windows" main_app.py
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: dist/Keyframe_Curator_Windows.exe
 
   build-macos:
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    - name: Install dependencies
-      run: |
-        pip install --upgrade pip
-        pip install pillow numpy opencv-python pyinstaller
-        python -c "import cv2, os, pathlib; print('Dependencies OK')"
-    - name: Build macOS app
-      run: |
-        pyinstaller --onedir --windowed --hidden-import cv2 --hidden-import pathlib --collect-all cv2 --name "Keyframe_Curator_Mac" main_app.py
-        cd dist
-        zip -r Keyframe_Curator_Mac.zip "Keyframe_Curator_Mac.app"
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: macos-app
-        path: dist/Keyframe_Curator_Mac.zip
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pillow pyinstaller opencv-python-headless numpy
+      
+      - name: Build macOS app
+        run: pyinstaller --onedir --windowed --name "Keyframe_Curator_Mac" main_app.py
+      
+      - name: Create zip
+        run: |
+          cd dist
+          zip -r Keyframe_Curator_Mac.zip "Keyframe_Curator_Mac.app"
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: dist/Keyframe_Curator_Mac.zip
