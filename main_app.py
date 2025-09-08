@@ -62,7 +62,7 @@ class HistoricalSceneApp:
         
         # Use YOUR original extraction settings
         self.extraction_settings = {
-            'scene_threshold': 0.1,      # Your original setting
+            'scene_threshold': 0.05,      # Your original setting
             'min_frames_between': 3,      # Your original: only 3 frames
             'black_threshold': 15,
             'black_ratio': 0.90,
@@ -569,6 +569,22 @@ S 跳过当前"""
             if not cap.isOpened():
                 self.root.after(0, lambda: messagebox.showerror("错误", "无法打开视频文件"))
                 return
+            print(f"Video path: {video_path}")
+            print(f"Video codec: {cap.get(cv2.CAP_PROP_FOURCC)}")
+            print(f"Total frames: {total_frames}")
+            print(f"FPS: {fps}")
+            print(f"Frame width: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}")
+            print(f"Frame height: {cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
+
+            # Test reading first frame
+            ret, test_frame = cap.read()
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to beginning
+            print(f"Can read first frame: {ret}")
+            if ret:
+                print(f"Frame shape: {test_frame.shape}")
+            else:
+                self.root.after(0, lambda: messagebox.showerror("错误", "无法读取视频帧"))
+                return
             
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             fps = cap.get(cv2.CAP_PROP_FPS)
@@ -606,18 +622,30 @@ S 跳过当前"""
             black_filtered = 0
             
             # Process first frame
+            # Process first frame with better error handling
             ret, first_frame = cap.read()
-            if ret and not self.is_black_frame(first_frame):
-                output_path = output_base / f"{video_name}_keyframe_{keyframes_detected:04d}.jpg"
-                cv2.imwrite(str(output_path.resolve()), first_frame,
-                        [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
-                success = cv2.imwrite(str(output_path.resolve()), first_frame,
-                                    [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
-                if not success:
-                    print(f"Failed to save first frame: {output_path}")
+            print(f"First frame read result: {ret}")
+
+            if ret:
+                print(f"First frame is black: {self.is_black_frame(first_frame)}")
+                if not self.is_black_frame(first_frame):
+                    output_path = output_base / f"{video_name}_keyframe_{keyframes_detected:04d}.jpg"
+                    success = cv2.imwrite(str(output_path.resolve()), first_frame,
+                                        [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
+                    print(f"First frame save success: {success}")
+                    if success:
+                        keyframes_detected += 1
+                        prev_frame = first_frame.copy()
+                        print(f"First keyframe saved: {output_path}")
+                    else:
+                        print(f"Failed to save first frame: {output_path}")
                 else:
-                    keyframes_detected += 1
-                    prev_frame = first_frame.copy()
+                    print("First frame is black, skipping...")
+                    prev_frame = first_frame.copy()  # Still use as reference
+            else:
+                print("Could not read first frame!")
+                self.root.after(0, lambda: messagebox.showerror("错误", "无法读取第一帧"))
+                return
             
             # Process remaining frames
             while True:
@@ -647,10 +675,16 @@ S 跳过当前"""
                     continue
                 
                 # Calculate scene change
+                # Calculate scene change with debugging
                 if prev_frame is not None:
                     difference = self.calculate_frame_difference(prev_frame, current_frame)
                     
+                    # Debug: Print difference values occasionally
+                    if frame_count % 100 == 0:
+                        print(f"Frame {frame_count}: difference = {difference:.3f}, threshold = {self.extraction_settings['scene_threshold']}")
+                    
                     if difference >= self.extraction_settings['scene_threshold']:
+                        print(f"Scene change detected at frame {frame_count}: {difference:.3f}")
                         # Save keyframe
                         timestamp = frame_count / fps
                         minutes = int(timestamp // 60)
@@ -673,6 +707,13 @@ S 跳过当前"""
                             print(f"Failed to save frame: {output_path}")
                                         
                 prev_frame = current_frame.copy()
+
+            print(f"Processing completed:")
+            print(f"  Total frames processed: {frame_count}")
+            print(f"  Keyframes detected: {keyframes_detected}")
+            print(f"  Black frames filtered: {black_filtered}")
+            print(f"  Max allowed keyframes: {max_allowed}")
+            print(f"  Scene threshold used: {self.extraction_settings['scene_threshold']}")
             
             cap.release()
             
