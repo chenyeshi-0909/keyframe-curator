@@ -578,6 +578,16 @@ S 跳过当前"""
             # Create output directory
             output_base = Path(video_path).parent / f"{video_name}_keyframes"
             output_base.mkdir(exist_ok=True)
+            # Verify folder was created successfully
+            if not output_base.exists():
+                self.root.after(0, lambda: messagebox.showerror("错误", f"无法创建输出文件夹: {output_base}"))
+                return
+
+            if not output_base.is_dir():
+                self.root.after(0, lambda: messagebox.showerror("错误", f"输出路径不是文件夹: {output_base}"))
+                return
+
+            print(f"Output folder created: {output_base.resolve()}")
             
             # Store in workflow
             self.current_workflow['keyframes_folder'] = str(output_base.resolve())
@@ -599,10 +609,15 @@ S 跳过当前"""
             ret, first_frame = cap.read()
             if ret and not self.is_black_frame(first_frame):
                 output_path = output_base / f"{video_name}_keyframe_{keyframes_detected:04d}.jpg"
-                cv2.imwrite(str(output_path), first_frame,
-                           [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
-                keyframes_detected += 1
-                prev_frame = first_frame.copy()
+                cv2.imwrite(str(output_path.resolve()), first_frame,
+                        [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
+                success = cv2.imwrite(str(output_path.resolve()), first_frame,
+                                    [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
+                if not success:
+                    print(f"Failed to save first frame: {output_path}")
+                else:
+                    keyframes_detected += 1
+                    prev_frame = first_frame.copy()
             
             # Process remaining frames
             while True:
@@ -644,15 +659,19 @@ S 跳过当前"""
                         filename = f"{video_name}_keyframe_{keyframes_detected:04d}_{minutes:02d}m{seconds:02d}s.jpg"
                         output_path = output_base / filename
                         
-                        cv2.imwrite(str(output_path), current_frame,
-                                   [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
-                        keyframes_detected += 1
-                        frames_since_last = 0
-                        
-                        # Update status
-                        self.root.after(0, lambda kf=keyframes_detected: 
-                                      self.extract_status.config(text=f"已提取 {kf} 个关键帧"))
-                
+                        cv2.imwrite(str(output_path.resolve()), current_frame,
+                                    [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
+                        success = cv2.imwrite(str(output_path.resolve()), current_frame,
+                                            [cv2.IMWRITE_JPEG_QUALITY, self.extraction_settings['jpeg_quality']])
+                        if success:
+                            keyframes_detected += 1
+                            frames_since_last = 0
+                            # Update status
+                            self.root.after(0, lambda kf=keyframes_detected: 
+                                        self.extract_status.config(text=f"已提取 {kf} 个关键帧"))
+                        else:
+                            print(f"Failed to save frame: {output_path}")
+                                        
                 prev_frame = current_frame.copy()
             
             cap.release()
@@ -686,6 +705,16 @@ S 跳过当前"""
         except Exception as e:
             self.root.after(0, lambda: messagebox.showerror("错误", f"提取失败: {str(e)}"))
             self.root.after(0, lambda: self.extract_btn.config(state='normal'))
+
+        saved_files = list(output_base.glob("*.jpg"))
+        print(f"Files actually saved: {len(saved_files)}")
+        for f in saved_files[:5]:  # Show first 5 files
+            print(f"  - {f.name}")
+
+        if len(saved_files) == 0:
+            print(f"No files found in: {output_base.resolve()}")
+            print(f"Folder exists: {output_base.exists()}")
+            print(f"Folder is directory: {output_base.is_dir()}")
     
     def calculate_frame_difference(self, frame1, frame2):
         """Calculate difference between frames using YOUR ORIGINAL METHOD"""
